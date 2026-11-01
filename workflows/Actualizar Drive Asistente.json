@@ -1,0 +1,332 @@
+{
+  "name": "Actualizar Drive Asistente",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "1YJ7WnXO_0j4rIKeymaEcAPz-fxrwIHHp",
+          "mode": "list",
+          "cachedResultName": "N8N-Asistente-Documentacion",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1YJ7WnXO_0j4rIKeymaEcAPz-fxrwIHHp"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "25719f53-951b-47d7-8f6f-5a762083e0c2",
+      "name": "Google Drive Trigger",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "3yNpw2Gwft0n9hNi",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        192,
+        0
+      ],
+      "id": "b8f9b3cd-0947-4282-8149-f88820273760",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "3yNpw2Gwft0n9hNi",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        384,
+        0
+      ],
+      "id": "3b4801a4-189b-4693-b665-d4faafb5f217",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "n8n-contratos",
+          "mode": "list",
+          "cachedResultName": "n8n-contratos"
+        },
+        "options": {
+          "pineconeNamespace": "={{ $json.estado === 'VIGENTE' ? 'kb-vigente-2026-10' : 'kb-obsoletos' }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        1056,
+        0
+      ],
+      "id": "a8057501-e875-4b0c-b7d5-793c50e1fe7c",
+      "name": "Pinecone Vector Store",
+      "credentials": {
+        "pineconeApi": {
+          "id": "TnacwuRxaahSF24t",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:v1.5"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        832,
+        256
+      ],
+      "id": "c4260e40-2c6e-4077-8c54-783605dfccd5",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "eUfwVPI2Zt50rlPJ",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "document_id",
+                "value": "={{ $json.document_id }}"
+              },
+              {
+                "name": "titulo",
+                "value": "={{ $json.titulo }}"
+              },
+              {
+                "name": "version",
+                "value": "={{ $json.version }}"
+              },
+              {
+                "name": "seccion",
+                "value": "={{ $json.seccion }}"
+              },
+              {
+                "name": "estado",
+                "value": "={{ $json.estado }}"
+              },
+              {
+                "name": "nombre_archivo",
+                "value": "={{ $json.nombre_archivo }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        224
+      ],
+      "id": "e478dbd0-5282-445e-a6c8-219baa0f9bf6",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 150,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        992,
+        336
+      ],
+      "id": "2cc483c2-a1be-4314-ad75-4f36c3f20a2b",
+      "name": "Recursive Character Text Splitter"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceText = String($json.text ?? '').replace(/\\r/g, '').trim();\n\nif (!sourceText) {\n  throw new Error('El PDF no contiene texto extraíble');\n}\n\nconst lines = sourceText.split('\\n');\nconst documentMatch = sourceText.match(/ID documental:\\s*(KB-\\d{2})\\s*\\|\\s*Versión:\\s*([^|\\n]+?)\\s*\\|\\s*Estado:\\s*([^|\\n]+)/i);\n\nif (!documentMatch) {\n  throw new Error('Cabecera documental no detectada: se esperaba ID, versión y estado');\n}\n\nconst document_id = documentMatch[1].trim().toUpperCase();\nconst version = documentMatch[2].trim();\nconst estado = documentMatch[3].trim().toUpperCase();\nconst titulo = lines.map((line) => line.trim()).find((line) => line.length > 0) ?? '';\nconst fileJson = $('Download file').item.json ?? {};\nconst nombre_archivo = String(fileJson.name ?? fileJson.originalFilename ?? '').trim();\n\nif (!titulo) {\n  throw new Error('No se ha podido obtener el título del documento');\n}\n\nif (!nombre_archivo) {\n  throw new Error('No se ha podido obtener el nombre del archivo de Drive');\n}\n\nconst headings = [];\n\nlines.forEach((line, index) => {\n  const match = line.trim().match(/^(\\d+(?:\\.\\d+)*)\\.\\s+(.+)$/);\n  if (match && match[2].trim().length > 0 && match[2].trim().length <= 100) {\n    headings.push({ index, seccion: match[1], tituloSeccion: match[2].trim() });\n  }\n});\n\nif (headings.length === 0) {\n  throw new Error(`No se han detectado secciones numeradas en ${nombre_archivo}`);\n}\n\nconst sections = headings.map((heading, idx) => {\n  const end = idx + 1 < headings.length ? headings[idx + 1].index : lines.length;\n  const sectionBody = lines.slice(heading.index, end).join('\\n').trim();\n\n  if (!sectionBody) {\n    throw new Error(`La sección ${heading.seccion} de ${nombre_archivo} está vacía`);\n  }\n\n  return {\n    json: {\n      document_id,\n      titulo,\n      version,\n      seccion: heading.seccion,\n      estado,\n      nombre_archivo,\n      text: `${document_id} | ${titulo} | Sección ${heading.seccion} | Estado: ${estado}\\n${sectionBody}`\n    }\n  };\n});\n\nreturn sections;"
+      },
+      "id": "6fdbdaaa-03a5-429f-8e9d-d9f4e84678f5",
+      "name": "Normalizar KB por sección",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "3d0a287c-0746-417d-a3c2-1ba5741a80ad",
+      "name": "Procesar secciones",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        832,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Normalizar KB por sección",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar KB por sección": {
+      "main": [
+        [
+          {
+            "node": "Procesar secciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar secciones": {
+      "main": [
+        null,
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Vector Store": {
+      "main": [
+        [
+          {
+            "node": "Procesar secciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "a2dd241a-e19c-4b2c-b565-82e14f994c9b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "5e7e570e1035a077e91bf4af5be8a7cd2123fb10b37355469c28f793080327f9"
+  },
+  "nodeGroups": [],
+  "id": "11TWxa5zb20T3LJz",
+  "tags": []
+}

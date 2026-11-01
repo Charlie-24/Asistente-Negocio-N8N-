@@ -1,0 +1,1008 @@
+{
+  "name": "Asistente de Negocio",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "nomic-embed-text:v1.5"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        768,
+        656
+      ],
+      "id": "d7601dbd-9399-4993-9220-b1c583ab1610",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "eUfwVPI2Zt50rlPJ",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "n8n-contratos",
+          "mode": "list",
+          "cachedResultName": "n8n-contratos"
+        },
+        "options": {
+          "pineconeNamespace": "kb-vigente-2026-10"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        528
+      ],
+      "id": "c94d3ee5-1102-45a4-9b2b-44a991dcf301",
+      "name": "Pinecone Vector Store",
+      "credentials": {
+        "pineconeApi": {
+          "id": "TnacwuRxaahSF24t",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen3:8b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmOllama",
+      "typeVersion": 1,
+      "position": [
+        1136,
+        432
+      ],
+      "id": "6592ab4a-0578-4e61-a86e-524fa8937f47",
+      "name": "Ollama Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "eUfwVPI2Zt50rlPJ",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Busca exclusivamente en la normativa interna VIGENTE. Devuelve fragmentos con document_id, titulo, version, seccion, estado y nombre_archivo. Úsala siempre que necesites evidencia documental.",
+        "topK": 8
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        336
+      ],
+      "id": "b92832a4-bd4a-459c-94cd-6b60194d3d1d",
+      "name": "Answer questions with a vector store"
+    },
+    {
+      "parameters": {
+        "model": "qwen3:8b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        528,
+        368
+      ],
+      "id": "24489a7f-715e-451c-ac9d-0cd0e1b87d52",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "eUfwVPI2Zt50rlPJ",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('When chat message received').first().json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        672,
+        384
+      ],
+      "id": "8965fdb0-1ffb-4e0a-9b76-0d1b129917dc",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        -1120,
+        80
+      ],
+      "id": "479a9d1b-a222-470b-85d2-3a3cc47af60f",
+      "name": "When chat message received",
+      "webhookId": "8bfde75d-c442-488e-9040-6fdc61539f1f"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "99fc35b4-b6ba-400a-ab06-9b695d94289e",
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "es_impacto",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -464,
+        48
+      ],
+      "id": "437b4854-2cb5-4624-b72c-652ccc95d779",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "pacheco.sapal24@cadiz.salesianos.edu",
+        "subject": "Requerimiento de confirmación humana",
+        "message": "Confirma que la acción externa es válida.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        -96
+      ],
+      "id": "850dc783-565d-419a-a336-37fbff7b55c6",
+      "name": "Send message and wait for response",
+      "webhookId": "b03b4902-d6a5-49e7-8c11-1f5d67140fc3",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "keep": "lastItems"
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        688,
+        -96
+      ],
+      "id": "2f33e2f8-71f3-4d6e-8b05-d1379c051ee3",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "content": "{\n  \"ID\": \"INC-001\", \n  \"ASUNTO\": \"Problema de acceso a la VPN\", \n  \"CATEGORIA\": \"Acceso\", \n  \"DESCRIPCION\": \"No puedo acceder a la VPN\", \n  \"ESTADO\": \"ASIGNADA\", \n  \"CARACTER\": \"URGENTE\"\n}\n",
+        "height": 208
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1904,
+        -496
+      ],
+      "typeVersion": 1,
+      "id": "4a594494-04cb-40c9-81f0-cd5261162b25",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "el problema era que devolvía 3 objetos al agente por lo que se generaba 3 veces el promt",
+        "height": 80
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1392,
+        -352
+      ],
+      "typeVersion": 1,
+      "id": "d1302000-7b8e-499d-82b2-caf404befff9",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4",
+          "mode": "list",
+          "cachedResultName": "Copia de Registro_Incidencias_SeisSiete",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 792166493,
+          "mode": "list",
+          "cachedResultName": "datos-entrada",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit#gid=792166493"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "ID",
+              "lookupValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('values0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        1872,
+        144
+      ],
+      "id": "78a94b76-22e4-4aa2-a20d-2a962a8551ab",
+      "name": "Búsqueda para modificación",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4",
+          "mode": "list",
+          "cachedResultName": "Copia de Registro_Incidencias_SeisSiete",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 792166493,
+          "mode": "list",
+          "cachedResultName": "datos-entrada",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit#gid=792166493"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('ID__using_to_match_', ``, 'string') }}",
+            "ASUNTO": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('ASUNTO', ``, 'string') }}",
+            "CATEGORIA": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('CATEGORIA', ``, 'string') }}",
+            "DESCRIPCION": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('DESCRIPCION', ``, 'string') }}",
+            "FECHA": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('FECHA', ``, 'string') }}",
+            "ESTADO": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('ESTADO', ``, 'string') }}",
+            "CARACTER": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('CARACTER', ``, 'string') }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ASUNTO",
+              "displayName": "ASUNTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CATEGORIA",
+              "displayName": "CATEGORIA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DESCRIPCION",
+              "displayName": "DESCRIPCION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA",
+              "displayName": "FECHA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ESTADO",
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CARACTER",
+              "displayName": "CARACTER",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        1728,
+        144
+      ],
+      "id": "b7044c3c-bb28-48c8-8276-15cbaf1b4ed0",
+      "name": "Actualización o creación de filas",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=en base a la información proporcionada, debes decidir si el mensaje enviado por el empleado es una consulta, o un registro de incidencia. Debes devolver como respuesta únicamente un true o false (true, es un registro; false, es una consulta) dándole valor a una clave llamada \"registro_incidencia\".\n\nAdemás, tiene que ponderar si es una \"operación con impacto\". Una operación con impacto es, por ejemplo, enviar una comunicación externa o modificar el estado de un expediente. En caso de ser una operación con impacto, O querer consultar el estado de una incidencia registrada, Devolver además del true/false de arriba, en un punto y aparte, \"es_impacto\" (sin las comillas).\n\nInformación proporcionada:{{ $('When chat message received').item.json.chatInput }}\n",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -880,
+        80
+      ],
+      "id": "a958cd03-b4e1-475d-acc1-bad3e2fa69b6",
+      "name": "Basic LLM Chain1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7079fdd0-a933-4bc5-8111-f249130ac457",
+              "leftValue": "={{ $('Basic LLM Chain1').item.json.text }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        64
+      ],
+      "id": "0fa7b75c-af47-43cb-ba9e-b5a0a07fa26c",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "model": "qwen3:8b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        336
+      ],
+      "id": "f4c6781b-35c0-48bd-9f6b-82db591dca67",
+      "name": "Ollama Chat Model4",
+      "credentials": {
+        "ollamaApi": {
+          "id": "eUfwVPI2Zt50rlPJ",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Debes rellenar los siguientes campos, en mayúsculas y sin tildes exceptuando el asunto y la descripción (sin incluir las claves), y devolverlos en un formato JSON, además de rellenar en la tabla de hojas de cálculo una fila nueva o modificar una ya existente dependiendo del contexto del mensaje: \n-ID: {{ $json.ID }} (Si es una petición de modificación, asigna el valor proporcionado en el mensaje del usuario en vez de este ID).\n-ASUNTO: Una breve descripción de la incidencia.\n-CATEGORIA: Razona qué tipo de incidencia es, a rasgos generales.\n-DESCRIPCION: La descripción proporcionada por el usuario.\n-FECHA: {{ $json.FECHA }}\n-ESTADO: Rellena automáticamente con \"PENDIENTE\".\n-CARACTER: Pondera si la incidencia es una de estos tipos según el contexto: [URGENTE, SENSIBLE, INCOMPLETO, NORMAL] (normal es todo lo que no es una de las tres primeras). \n\nAdemás, si la petición es una modificación de un incidente ya registrado, sólo debes proporcionar el ID correspondiente y su modificación respectiva, y los demás campos aporta la clave pero sin nada (vacía). \n\nInformación del registro de incidencia: {{ $('When chat message received').item.json.chatInput }}\n\nNotas para tener en cuenta antes de ejecutar el prompt:\n1. No ejecutar más de una vez por registro.\n2. No añadir más claves de las proporcionadas.\n3. No adjuntar más información además del JSON con las 7 claves solicitadas.\n4. En caso de modificación de una incidencia, utiliza la herramienta de búsqueda de filas para respaldarte en los datos previamente escritos de la fila, para luego, durante la modificación, rellenar los datos que no se han modificado con los que ya estaban. NO autorellenar los campos que no han sido modificados con información que no haya estado allí previamente.\n\nCrea una nueva fila en la hoja de cálculo si es necesario.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1568,
+        -256
+      ],
+      "id": "6721321d-fee5-4ad2-b6bd-1d2105535efa",
+      "name": "AI Agent2"
+    },
+    {
+      "parameters": {
+        "model": "qwen3:8b",
+        "options": {
+          "think": false,
+          "lowVram": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        -32
+      ],
+      "id": "c05376ef-c91a-4334-a7b9-258442c8d90e",
+      "name": "Ollama Chat Model5",
+      "credentials": {
+        "ollamaApi": {
+          "id": "eUfwVPI2Zt50rlPJ",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.output }}",
+        "schemaType": "manual",
+        "inputSchema": "\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"ID\": {\n      \"type\": \"string\"\n    },\n    \"ASUNTO\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"CATEGORIA\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"DESCRIPCION\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"FECHA\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"ESTADO\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"CARACTER\": {\n      \"type\": [\"string\", \"null\"]\n    }\n  },\n  \"required\": [\n    \"ID\",\n    \"ASUNTO\",\n    \"CATEGORIA\",\n    \"DESCRIPCION\",\n    \"FECHA\",\n    \"ESTADO\",\n    \"CARACTER\"\n  ],\n  \"additionalProperties\": false\n}\n",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        1920,
+        -256
+      ],
+      "id": "717bb33a-5a52-4c98-a4f5-b1b5d6730b8a",
+      "name": "Information Extractor1"
+    },
+    {
+      "parameters": {
+        "model": "qwen3:8b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        -32
+      ],
+      "id": "5bf3cf36-74df-48da-a5ee-7e78e52931b6",
+      "name": "Ollama Chat Model6",
+      "credentials": {
+        "ollamaApi": {
+          "id": "eUfwVPI2Zt50rlPJ",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0444e7fb-64b6-4f21-b3de-d1ff229ce4e0",
+              "name": "ID",
+              "value": "={{ 'INC-' + String(+$('Datos1').last().json.ID.split('-')[1] + 1).padStart(3, '0') }}",
+              "type": "string"
+            },
+            {
+              "id": "34b5927a-12f2-48eb-9e92-1059ebfffade",
+              "name": "FECHA",
+              "value": "={{ $now.toFormat('yyyy-MM-dd HH:mm') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        928,
+        -80
+      ],
+      "id": "7e8316d1-03d3-49a8-853b-c99460363afb",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4",
+          "mode": "list",
+          "cachedResultName": "Copia de Registro_Incidencias_SeisSiete",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 792166493,
+          "mode": "list",
+          "cachedResultName": "datos-entrada",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit#gid=792166493"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        432,
+        -96
+      ],
+      "id": "13fdb452-c3ef-4825-ad49-9aafad22d494",
+      "name": "Datos1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4",
+          "mode": "list",
+          "cachedResultName": "Copia de Registro_Incidencias_SeisSiete",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 792166493,
+          "mode": "list",
+          "cachedResultName": "datos-entrada",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1imVb_jFiv6K9tVE3O4zKltDRGVkuJD6C117xzFbPBP4/edit#gid=792166493"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $json.output.ID }}",
+            "ASUNTO": "={{ $json.output.ASUNTO }}",
+            "CATEGORIA": "={{ $json.output.CATEGORIA }}",
+            "DESCRIPCION": "={{ $json.output.DESCRIPCION }}",
+            "ESTADO": "={{ $json.output.ESTADO }}",
+            "CARACTER": "={{ $json.output.CARACTER }}",
+            "FECHA": "={{ $('Edit Fields1').item.json.FECHA }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ASUNTO",
+              "displayName": "ASUNTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CATEGORIA",
+              "displayName": "CATEGORIA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DESCRIPCION",
+              "displayName": "DESCRIPCION",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FECHA",
+              "displayName": "FECHA",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ESTADO",
+              "displayName": "ESTADO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CARACTER",
+              "displayName": "CARACTER",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2336,
+        -256
+      ],
+      "id": "6e8ed579-4dd8-4939-977b-bd10ccc891c6",
+      "name": "Append or update row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        1616,
+        -16
+      ],
+      "id": "b2c84b82-a27c-4108-a76b-5abb757bc17b",
+      "name": "Simple Memory2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('When chat message received').first().json.chatInput }}",
+        "options": {
+          "systemMessage": "Eres un agente experto en la normativa interna de la empresa. Respondes preguntas de los empleados usando exclusivamente la información de la base documental de Pinecone.\n\nReglas:\n1. Antes de responder, usa siempre la herramienta \"Answer questions with a vector store\" para buscar evidencia documental. No respondas de memoria.\n2. Responde en español, de forma clara y concisa.\n3. Toda respuesta debe estar respaldada por la documentación. Al final, cita el documento y la sección con el formato (KB-XX, sección X).\n4. Nunca inventes información. Si la búsqueda no devuelve evidencia relevante, responde exactamente: \"No se ha encontrado nada de información al respecto\".\n5. Si la información encontrada está marcada como OBSOLETA o renovada, indica que la política ha sido renovada y proporciona la información actualizada de los documentos VIGENTES."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        624,
+        192
+      ],
+      "id": "0fd6b1ab-45ce-4fc1-9ba1-f468b557192c",
+      "name": "Agente de consultas a Documentacion"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Vector Store": {
+      "ai_vectorStore": [
+        [
+          {
+            "node": "Answer questions with a vector store",
+            "type": "ai_vectorStore",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Answer questions with a vector store",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer questions with a vector store": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de consultas a Documentacion",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de consultas a Documentacion",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente de consultas a Documentacion",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send message and wait for response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message and wait for response": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Búsqueda para modificación": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualización o creación de filas": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain1": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Datos1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agente de consultas a Documentacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor1": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model6": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos1": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory2": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent2",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de consultas a Documentacion": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "6c0e2840-a094-409b-ae13-f441e056b863",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "5e7e570e1035a077e91bf4af5be8a7cd2123fb10b37355469c28f793080327f9"
+  },
+  "nodeGroups": [],
+  "id": "S2t39QnJhVvhKq0t",
+  "tags": []
+}
