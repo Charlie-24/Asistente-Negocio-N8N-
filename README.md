@@ -51,6 +51,7 @@ flowchart TD
     H --> I["AI Agent2<br/>herramientas de Sheets + memoria"]
     I --> J["Information Extractor1<br/>JSON de 7 campos"]
     J --> K["Append or update row<br/>Google Sheets"]
+    K --> O["Respuesta al chat<br/>output de confirmación"]
     E -->|"false"| L["Agente de consultas<br/>a Documentación"]
     L --> M["Tool: vector store<br/>Pinecone topK = 8"]
     M --> N["Respuesta con cita<br/>KB-XX, sección X"]
@@ -62,7 +63,7 @@ flowchart TD
 2. **Triaje.** `Basic LLM Chain1` recibe el mensaje y pide al modelo una decisión simple: `true` si es un registro de incidencia, `false` si es una consulta. Si detecta una operación con impacto —por ejemplo, una comunicación externa, un cambio de estado de expediente o una consulta de estado— añade la marca `es_impacto`.
 3. **Detección de impacto.** El nodo `If` comprueba si la salida contiene `es_impacto`. La rama afirmativa pasa por un nodo Gmail `sendAndWait` pensado para solicitar confirmación humana. **Ese nodo está actualmente deshabilitado**, por lo que hoy el flujo continúa sin puerta de aprobación real.
 4. **Separación registro/consulta.** `If2` comprueba si la salida del clasificador contiene `true`:
-   - **Rama de incidencia:** lee la hoja de registro, recorta la entrada a una sola fila (`Limit`), calcula el siguiente ID (`INC-001`, `INC-002`, …) y la fecha actual en el nodo `Edit Fields1`, y entrega el contexto a `AI Agent2`. El agente dispone de dos herramientas de Google Sheets: búsqueda por ID y `appendOrUpdate`. Después, `Information Extractor1` fuerza un JSON con siete campos y el nodo final `Append or update row in sheet1` vuelve a escribir en la hoja usando el ID como clave de coincidencia.
+   - **Rama de incidencia:** lee la hoja de registro, recorta la entrada a una sola fila (`Limit`), calcula el siguiente ID (`INC-001`, `INC-002`, …) y la fecha actual en el nodo `Edit Fields1`, y entrega el contexto a `AI Agent2`. El agente dispone de dos herramientas de Google Sheets: búsqueda por ID y `appendOrUpdate`. Después, `Information Extractor1` fuerza un JSON con siete campos y el nodo `Append or update row in sheet1` vuelve a escribir en la hoja usando el ID como clave de coincidencia. Finalmente, `Respuesta al chat` construye el campo `output` que el Chat Trigger devuelve como mensaje de confirmación.
    - **Rama documental:** invoca al `Agente de consultas a Documentación`, un agente RAG con memoria de conversación y una herramienta de búsqueda vectorial sobre Pinecone. El *system prompt* obliga a buscar siempre antes de responder, citar documento y sección, no inventar y devolver una frase exacta cuando no hay evidencia: «No se ha encontrado nada de información al respecto».
 
 **Decisiones de diseño del asistente.**
@@ -75,6 +76,7 @@ flowchart TD
 | Google Sheets como registro operativo | Herramienta gratuita, visible y editable por el equipo | Poco adecuada para alta concurrencia o grandes volúmenes |
 | Memoria de ventana de 10 mensajes | Continuidad conversacional sin contexto ilimitado | Puede perder referencias de conversaciones largas |
 | `.first()` en la rama documental | Evita fallos de expresiones en subnodos y después de un `If` | Requiere recordar qué contexto usar en cada nodo |
+| Respuesta explícita con `output` al final de incidencias | El modo `lastNode` del Chat Trigger exige que el último nodo devuelva `output`; un nodo de Sheets no sirve como respuesta | Hay que mantener el mensaje alineado con los campos extraídos |
 
 ### 2.2 Workflow `Actualizar Drive Asistente`
 
@@ -263,6 +265,9 @@ El flujo contempla una confirmación humana para operaciones con impacto mediant
 | 8 | Doble vía de escritura | `AI Agent2` tiene herramienta de escritura y después el flujo vuelve a escribir | Funciona, pero puede duplicar o sobrescribir | Pendiente |
 | 9 | Confirmación humana inactiva | Nodo Gmail deshabilitado | Rama de impacto sin control real | Pendiente |
 | 10 | Posible mezcla de contexto en incidencias | `Simple Memory2` no define clave de sesión explícita | Revisar el alcance de la memoria | Pendiente |
+| 11 | La rama de incidencia no devolvía una respuesta legible al chat | El último nodo era Google Sheets y el Chat Trigger usa `lastNode`, que espera `{ output: ... }` | Nodo `Respuesta al chat` con el campo `output` después de la escritura | Resuelto; pendiente prueba E2E |
+
+**Nota de verificación (2026-11-01).** El nodo se importó y publicó correctamente y aparece en la versión activa (`8b48ddb7-f0d0-4b2f-86af-77dfeba6257c`). No se ha ejecutado la rama de incidencia de extremo a extremo porque el Chat Trigger no es público y la credencial de Google Sheets aparece como «needs to be reconnected» en los logs. Hay que reconectarla en n8n → Credentials y probar con una incidencia de prueba.
 
 **Evidencia de ejecuciones.** En la base de datos de n8n, el histórico del asistente registra 12 ejecuciones correctas, 3 errores y 2 cancelaciones; la ingesta registra 8 correctas y 43 errores. En la muestra de errores revisada, la mayoría corresponden a fallos de conexión del trigger de Google Drive y uno a un PDF con estructura inválida; no se originaron en el pipeline de recuperación. El error `No prompt specified` del asistente pertenece a una versión anterior del agente documental y quedó resuelto con la corrección de expresiones descrita.
 
@@ -312,6 +317,7 @@ Las principales carencias no están en la idea de RAG, sino en los bordes: el co
 | Tamaño de lote de ingesta | `1` sección |
 | Sondeo de Drive | cada minuto |
 | Opciones del agente de incidencias | `think: false`, `lowVram: false` |
+| Respuesta al chat | Nodo `Respuesta al chat` (Set) con campo `output` |
 | Formato de ID | `INC-XXX` |
 | Formato de fecha | `yyyy-MM-dd HH:mm` |
 | Campos de incidencia | `ID`, `ASUNTO`, `CATEGORIA`, `DESCRIPCION`, `FECHA`, `ESTADO`, `CARACTER` |

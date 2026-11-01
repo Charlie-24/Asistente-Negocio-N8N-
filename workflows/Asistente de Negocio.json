@@ -732,6 +732,29 @@
       ],
       "id": "0fd6b1ab-45ce-4fc1-9ba1-f468b557192c",
       "name": "Agente de consultas a Documentacion"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bc21825e-37ee-4d04-8bdc-bfd09dda4f4b",
+              "name": "output",
+              "value": "=Incidencia {{ $('Information Extractor1').first().json.output.ID }} registrada o actualizada correctamente.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2528,
+        -256
+      ],
+      "id": "2fc3bc49-63f8-4b5e-8581-d38cd21d9602",
+      "name": "Respuesta al chat"
     }
   ],
   "pinData": {},
@@ -985,6 +1008,17 @@
       "main": [
         []
       ]
+    },
+    "Append or update row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Respuesta al chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -995,7 +1029,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": true
   },
-  "versionId": "6c0e2840-a094-409b-ae13-f441e056b863",
+  "versionId": "8b48ddb7-f0d0-4b2f-86af-77dfeba6257c",
   "meta": {
     "templateCredsSetupCompleted": true,
     "aiBuilderAssisted": true,
