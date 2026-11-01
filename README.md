@@ -1,326 +1,154 @@
-# Memoria técnica — Asistente de Negocio
+# Documentación técnica — Asistente de Negocio (versión actualizada)
 
-**Automatización de consultas documentales y registro de incidencias con n8n, RAG local y Google Drive/Sheets**
-
-| Ficha del proyecto | |
+| Ficha | |
 |---|---|
 | Fecha | 2026-11-01 |
 | Orquestador | n8n 2.41.7, self-hosted sobre Docker |
-| Workflows activos | `Asistente de Negocio` y `Actualizar Drive Asistente` |
-| Modelo de lenguaje | `qwen3:8b` servido por Ollama |
-| Embeddings | `nomic-embed-text:v1.5` servido por Ollama |
+| Workflow | `Asistente de negocio latest` (`workflows/Asistente de negocio.json`); disponible en MCP |
+| Estado | Borrador, no activo; la versión anterior sigue activa |
+| Modelo de lenguaje | `qwen3:8b` en Ollama |
+| Embeddings | `nomic-embed-text:v1.5` en Ollama |
 | Base vectorial | Pinecone, índice `n8n-contratos` |
-| Integraciones | Google Drive y Google Sheets mediante OAuth2; Gmail (nodo deshabilitado) |
 
 ---
 
 ## 1. Resumen
 
-El proyecto implementa un asistente conversacional para empleados que resuelve dos tipos de peticiones con una única entrada de chat:
+El asistente recibe mensajes por chat y los clasifica en tres caminos:
 
-1. **Consultas sobre normativa interna**, respondidas con evidencia documental y citas.
-2. **Registro y modificación de incidencias**, persistidas en una hoja de cálculo de Google Sheets.
+1. **Registro o modificación de una incidencia**, con escritura en Google Sheets.
+2. **Consulta sobre una incidencia ya registrada**, respondida con datos de la hoja.
+3. **Consulta sobre normativa interna**, respondida con RAG sobre Pinecone.
 
-La base de conocimiento se mantiene de forma automática: cuando se sube un PDF a una carpeta concreta de Google Drive, un segundo workflow lo descarga, extrae el texto, lo normaliza por secciones, genera embeddings y lo indexa en Pinecone. El asistente consulta exclusivamente la documentación marcada como vigente.
-
-El diseño prioriza cuatro ideas:
-
-- **Coste cero en servicios de IA:** inferencia y embeddings se ejecutan en local con Ollama; no se depende de APIs de pago.
-- **Trazabilidad:** cada respuesta documental debe citar documento y sección; cada incidencia tiene un identificador determinista y una fecha generada por el sistema.
-- **Separación de responsabilidades:** la ingesta documental y la atención al usuario son workflows independientes.
-- **Determinismo donde importa:** los identificadores, fechas y escrituras en la hoja no se delegan al modelo; el LLM se reserva para clasificar, redactar y extraer información.
+El cambio principal respecto a la versión anterior es el uso de **response nodes** (`responseMode: responseNodes`): el Chat Trigger ya no responde con la salida del último nodo, sino que cada rama debe terminar en un nodo `Chat` que envía el mensaje. También se añadió un agente específico para consultar incidencias y se separó el triaje en `es_registro`, `es_seguimiento` y `es_impacto`.
 
 ---
 
 ## 2. Arquitectura
 
-El sistema se compone de dos workflows activos que comparten el mismo índice vectorial y el mismo stack local de modelos.
-
-### 2.1 Workflow `Asistente de Negocio`
-
 ```mermaid
 flowchart TD
-    A["Chat Trigger<br/>When chat message received<br/>(sin publicación pública)"] --> B["Basic LLM Chain1<br/>triaje con qwen3:8b"]
-    B --> C{"If<br/>¿contiene es_impacto?"}
-    C -->|"sí"| D["Gmail sendAndWait<br/>confirmación humana<br/>(deshabilitado)"]
+    A["Chat Trigger<br/>responseMode: responseNodes"] --> B["Basic LLM Chain<br/>triaje"]
+    B --> C{"¿es_impacto?"}
+    C -->|"sí"| D["Gmail sendAndWait<br/>confirmación humana"]
     C -->|"no"| E
-    D --> E{"If2<br/>¿registro de incidencia?"}
-    E -->|"true"| F["Datos1<br/>leer hoja de incidencias"]
-    F --> G["Limit<br/>última fila"]
-    G --> H["Edit Fields1<br/>ID INC-XXX + FECHA"]
-    H --> I["AI Agent2<br/>herramientas de Sheets + memoria"]
-    I --> J["Information Extractor1<br/>JSON de 7 campos"]
-    J --> K["Append or update row<br/>Google Sheets"]
-    K --> O["Respuesta al chat<br/>output de confirmación"]
-    E -->|"false"| L["Agente de consultas<br/>a Documentación"]
-    L --> M["Tool: vector store<br/>Pinecone topK = 8"]
-    M --> N["Respuesta con cita<br/>KB-XX, sección X"]
+    D --> E{"¿es_registro?"}
+    E -->|"sí"| F["Datos → Limit1 → Edit Fields"]
+    F --> G["AI Agent<br/>búsqueda + actualización en Sheets"]
+    G --> H["Chat<br/>operación confirmada"]
+    E -->|"no"| I{"¿es_seguimiento?"}
+    I -->|"sí"| J["AI Agent1<br/>consulta de incidencia"]
+    J --> K["Chat<br/>respuesta de consulta"]
+    I -->|"no"| L["Agente de consultas<br/>a Documentación (RAG)"]
+    L --> M["Chat: Respuesta documental<br/>{{ $json.output }}"]
 ```
 
-**Flujo de atención.**
+### 2.1 Triaje
 
-1. **Entrada única.** El disparador es un Chat Trigger de n8n, configurado sin publicación pública: el chat se usa desde el editor y no queda expuesto como webhook abierto.
-2. **Triaje.** `Basic LLM Chain1` recibe el mensaje y pide al modelo una decisión simple: `true` si es un registro de incidencia, `false` si es una consulta. Si detecta una operación con impacto —por ejemplo, una comunicación externa, un cambio de estado de expediente o una consulta de estado— añade la marca `es_impacto`.
-3. **Detección de impacto.** El nodo `If` comprueba si la salida contiene `es_impacto`. La rama afirmativa pasa por un nodo Gmail `sendAndWait` pensado para solicitar confirmación humana. **Ese nodo está actualmente deshabilitado**, por lo que hoy el flujo continúa sin puerta de aprobación real.
-4. **Separación registro/consulta.** `If2` comprueba si la salida del clasificador contiene `true`:
-   - **Rama de incidencia:** lee la hoja de registro, recorta la entrada a una sola fila (`Limit`), calcula el siguiente ID (`INC-001`, `INC-002`, …) y la fecha actual en el nodo `Edit Fields1`, y entrega el contexto a `AI Agent2`. El agente dispone de dos herramientas de Google Sheets: búsqueda por ID y `appendOrUpdate`. Después, `Information Extractor1` fuerza un JSON con siete campos y el nodo `Append or update row in sheet1` vuelve a escribir en la hoja usando el ID como clave de coincidencia. Finalmente, `Respuesta al chat` construye el campo `output` que el Chat Trigger devuelve como mensaje de confirmación.
-   - **Rama documental:** invoca al `Agente de consultas a Documentación`, un agente RAG con memoria de conversación y una herramienta de búsqueda vectorial sobre Pinecone. El *system prompt* obliga a buscar siempre antes de responder, citar documento y sección, no inventar y devolver una frase exacta cuando no hay evidencia: «No se ha encontrado nada de información al respecto».
+`Basic LLM Chain` analiza el mensaje y devuelve una o varias marcas:
 
-**Decisiones de diseño del asistente.**
+- `es_registro`: alta o modificación de una incidencia.
+- `es_seguimiento`: consulta sobre una incidencia ya registrada.
+- `es_impacto`: operación sensible o con impacto externo; activa la confirmación humana.
 
-| Decisión | Motivo | Contrapartida |
-|---|---|---|
-| Un único chat con triaje por LLM | Evita varios asistentes y mantiene una experiencia de usuario simple | Depende de la fiabilidad del clasificador |
-| ID y fecha deterministas en `Edit Fields1` | Auditoría y correlación fiables; no se deja la numeración al modelo | Asume que la hoja está ordenada y que el último ID es el mayor |
-| Agente + `Information Extractor` | Separa razonamiento y validación de esquema antes de escribir | Añade una llamada adicional al modelo |
-| Google Sheets como registro operativo | Herramienta gratuita, visible y editable por el equipo | Poco adecuada para alta concurrencia o grandes volúmenes |
-| Memoria de ventana de 10 mensajes | Continuidad conversacional sin contexto ilimitado | Puede perder referencias de conversaciones largas |
-| `.first()` en la rama documental | Evita fallos de expresiones en subnodos y después de un `If` | Requiere recordar qué contexto usar en cada nodo |
-| Respuesta explícita con `output` al final de incidencias | El modo `lastNode` del Chat Trigger exige que el último nodo devuelva `output`; un nodo de Sheets no sirve como respuesta | Hay que mantener el mensaje alineado con los campos extraídos |
+El nodo `Es de impacto?` comprueba `es_impacto` y, si aparece, pasa por el nodo Gmail `sendAndWait`. Después, `Para mirar si es un registro` comprueba `es_registro`. Si no es registro, el nodo `If` comprueba `es_seguimiento`: si es seguimiento va al agente de incidencias; si no, al agente documental.
 
-### 2.2 Workflow `Actualizar Drive Asistente`
+### 2.2 Rama de incidencias
 
-```mermaid
-flowchart LR
-    A["Google Drive Trigger<br/>carpeta específica<br/>fileCreated, cada minuto"] --> B["Download file"]
-    B --> C["Extract from File<br/>PDF"]
-    C --> D["Normalizar KB por sección<br/>(Code)"]
-    D --> E["Split In Batches<br/>1 sección"]
-    E --> F["Pinecone Vector Store<br/>insert + namespace por estado"]
-    F --> E
-    G["Embeddings Ollama<br/>nomic-embed-text:v1.5"] -.-> F
-    H["Default Data Loader<br/>+ Recursive Splitter 1000/150"] -.-> F
-```
+`Datos` lee la hoja de registro y `Limit1` conserva una sola fila. `Edit Fields` genera:
 
-**Pipeline de ingesta.**
+- `ID`: `INC-XXX`, incrementando el último ID de la hoja.
+- `FECHA`: `$now.toFormat('yyyy-MM-dd HH:mm')`.
 
-1. **Disparador.** `Google Drive Trigger` vigila una carpeta concreta y se activa con `fileCreated`. La comprobación es por sondeo cada minuto; no requiere exponer un webhook público.
-2. **Descarga y extracción.** `Download file` obtiene el archivo y `Extract from File` extrae el texto del PDF.
-3. **Normalización por secciones.** El nodo `Normalizar KB por sección` valida que el documento cumpla un contrato explícito:
-   - cabecera con `ID documental` (formato `KB-XX`), `Versión` y `Estado`;
-   - título en la primera línea no vacía;
-   - secciones numeradas con el patrón `1.`, `1.1.`, `2.`…
-   - nombre de archivo tomado del nodo de descarga.
-   Si falta la cabecera, no hay secciones o alguna sección está vacía, el nodo lanza un error descriptivo y aborta la ingesta en lugar de indexar contenido incompleto.
-4. **Un ítem por sección.** El código devuelve una lista de secciones; `Split In Batches` las procesa de una en una para controlar el tamaño de cada operación.
-5. **Indexación.** `Pinecone Vector Store` inserta cada sección en el índice `n8n-contratos`. El namespace se decide con una expresión: `estado === 'VIGENTE'` va a `kb-vigente-2026-10`; cualquier otro estado va a `kb-obsoletos`.
-6. **Enriquecimiento.** `Default Data Loader` adjunta metadatos por fragmento y `Recursive Character Text Splitter` divide el texto con tamaño 1000 y solape 150 caracteres. Los embeddings se generan con `nomic-embed-text:v1.5` en Ollama.
+`AI Agent` recibe esos datos, rellena los siete campos de la incidencia y usa las herramientas `Búsqueda para modificación1` y `Actualización o creación de filas1` para buscar y escribir en Google Sheets. El prompt insiste en ejecutarse una sola vez y en no inventar claves. Al terminar, el nodo `Chat` responde: «Tu operación ha sido confirmada y procesada».
 
-**Contrato documental esperado.**
+En esta versión ya no existe el `Information Extractor` ni el nodo final de escritura: la validación del JSON y la escritura las realiza el agente mediante su herramienta.
 
-```text
-Política de vacaciones y permisos
-ID documental: KB-02 | Versión: 2026-10 | Estado: VIGENTE
+### 2.3 Rama de consulta de incidencia
 
-1. Marco general
-...
-2. Duración de las vacaciones
-...
-```
+`AI Agent1` recibe el mensaje y usa la herramienta `Búsqueda para consultar una incidencia registrada`, que busca por ID en la hoja. El agente responde con un resumen de la incidencia y el nodo `Respuesta de consulta de incidencia` envía `{{ $json.output }}` al chat.
 
-Este contrato es la decisión más importante de la ingesta: convierte un PDF arbitrario en una estructura verificable y permite que cada fragmento herede `document_id`, `titulo`, `version`, `seccion` y `estado`. La detección es heurística —una lista numerada del cuerpo podría interpretarse como sección—, por lo que el formato debe mantenerse consistente.
+### 2.4 Rama documental
+
+El agente `Agente de consultas a Documentacion` es el camino por defecto para las consultas que no son registro ni seguimiento. Usa:
+
+- Pinecone, índice `n8n-contratos`, namespace `kb-vigente-2026-10`.
+- `nomic-embed-text:v1.5` para embeddings y `qwen3:8b` para redactar.
+- `topK = 8` y memoria de 10 mensajes con clave de sesión.
+- Un *system prompt* que exige buscar siempre, citar `KB-XX, sección X` y responder «No se ha encontrado nada de información al respecto» si no hay evidencia.
+
+La rama termina en el nodo `Chat` **`Respuesta documental`**, que envía al usuario el campo `output` del agente (`message = {{ $json.output }}`). Así se completa el requisito de `responseNodes`: cada rama tiene su propio nodo de respuesta.
+
+### 2.5 Ingesta documental
+
+El workflow `Actualizar Drive Asistente` sigue siendo el encargado de mantener la base de conocimiento: detecta un PDF nuevo en Drive, lo descarga, extrae el texto, lo normaliza por secciones (`ID documental`, versión, estado y apartados numerados), lo divide con solapamiento 150 y lo indexa en Pinecone. El namespace se elige según el estado: `kb-vigente-2026-10` para `VIGENTE` y `kb-obsoletos` para el resto.
 
 ---
 
-## 3. Herramientas gratuitas utilizadas
+## 3. Herramientas gratuitas
 
-| Herramienta | Función en el sistema | Coste / licencia |
+| Herramienta | Uso | Coste |
 |---|---|---|
-| **n8n 2.41.7** self-hosted | Orquestación de ambos workflows, chat, credenciales y ejecuciones | Fair-code (Sustainable Use License); autoalojado sin coste para uso interno |
-| **Docker** | Contenedor del orquestador | Docker Engine/Desktop sin coste para uso personal o educativo |
-| **Ollama** | Servidor local de modelos | MIT |
-| **qwen3:8b** | Clasificación, agente de incidencias, extracción y respuestas RAG | Pesos abiertos, licencia Apache 2.0 |
-| **nomic-embed-text:v1.5** | Embeddings de documentos y consultas | Licencia Apache 2.0 |
-| **Pinecone** | Base de datos vectorial gestionada | Plan gratuito de Pinecone |
-| **Google Drive** | Repositorio de PDFs de entrada | Cuota gratuita de la cuenta de Google |
-| **Google Sheets** | Registro operativo de incidencias | Cuota gratuita de la cuenta de Google |
-| **Gmail** | Confirmación humana de operaciones con impacto | Cuota gratuita; nodo actualmente deshabilitado |
-| **n8n Chat Trigger** | Interfaz de chat integrada | Incluido en n8n |
+| n8n 2.41.7 self-hosted | Orquestación, chat y credenciales | Fair-code; autoalojado sin coste de licencia |
+| Docker | Contenedor de n8n | Gratuito para uso personal/educativo |
+| Ollama | Inferencia local | MIT |
+| qwen3:8b | Triaje, agentes y respuestas | Apache 2.0 |
+| nomic-embed-text:v1.5 | Embeddings | Apache 2.0 |
+| Pinecone | Base vectorial | Plan gratuito |
+| Google Drive / Sheets / Gmail | Entrada, registro y confirmación | Cuotas gratuitas de Google |
 
-**Por qué esta combinación.** Todo el procesamiento de lenguaje se hace en local: los documentos no se envían a un proveedor de LLM. Pinecone actúa únicamente como almacén vectorial y Google Drive/Sheets cubren el almacenamiento y la edición que el equipo ya utiliza. El resultado es un sistema sin suscripciones de IA, reproducible en un equipo de desarrollo y fácil de explicar.
-
-**Límites asumidos.** El modelo local de 8B ofrece una calidad inferior a los modelos frontera y consume CPU/GPU y RAM del host. El plan gratuito de Pinecone impone límites de almacenamiento y operaciones. Las cuotas de Google pueden agotarse con sondeos frecuentes o muchas escrituras.
+No se usan APIs de pago de modelos: todo el procesamiento de lenguaje se hace en local.
 
 ---
 
-## 4. Estrategia RAG
+## 4. Estrategia RAG (resumen)
 
-### 4.1 Ingesta: de PDF a vectores
+La ingesta normaliza el PDF por secciones antes de trocearlo. Cada fragmento conserva `document_id`, `titulo`, `version`, `seccion`, `estado` y `nombre_archivo`, y el texto se prefija con el identificador y la sección. Esto permite citar la respuesta y separar normativa vigente de obsoleta.
 
-La ingesta no trocea el PDF directamente. Primero lo convierte en una representación estructurada:
-
-```text
-PDF → texto → validación de cabecera → detección de secciones numeradas
-    → un ítem por sección → splitter recursivo → embeddings → Pinecone
-```
-
-Ventajas de normalizar antes de trocear:
-
-- **Precisión:** cada fragmento pertenece a una sección concreta y conserva su número.
-- **Citabilidad:** la respuesta puede referirse a `KB-02, sección 2` sin inferir la sección a partir del texto.
-- **Aislamiento:** un PDF mal formado falla al principio, no contamina el índice con fragmentos sin metadatos.
-- **Mantenimiento:** la unidad de conocimiento es la sección, no el documento completo.
-
-### 4.2 Metadatos por fragmento
-
-| Campo | Ejemplo | Uso |
-|---|---|---|
-| `document_id` | `KB-02` | Identificación y cita |
-| `titulo` | `Política de vacaciones` | Contexto para el modelo |
-| `version` | `2026-10` | Trazabilidad de la versión |
-| `seccion` | `2` | Cita precisa |
-| `estado` | `VIGENTE` / `OBSOLETA` | Enrutamiento de namespace |
-| `nombre_archivo` | `KB-02_vacaciones.pdf` | Auditoría del origen |
-
-Además, el texto de cada sección se prefija con `document_id | titulo | Sección X | Estado: ...` antes de pasarlo al splitter. Así el fragmento conserva contexto incluso si el splitter lo separa del encabezado original.
-
-### 4.3 Recuperación y generación
-
-La rama documental usa **RAG agéntico**:
-
-1. El agente recibe la pregunta y el *system prompt* le obliga a usar la herramienta `Answer questions with a vector store` antes de responder.
-2. La herramienta consulta Pinecone con `topK = 8` en el namespace `kb-vigente-2026-10`.
-3. El agente redacta en español, de forma concisa, y cita el documento y la sección.
-4. Si no hay evidencia, responde exactamente «No se ha encontrado nada de información al respecto».
-5. La memoria `Simple Memory` conserva los últimos 10 mensajes, con `sessionIdType: customKey` y la clave tomada del `sessionId` del Chat Trigger.
-
-La decisión de usar un agente en lugar de una cadena fija aporta flexibilidad: el modelo puede reformular la consulta y decidir cuándo buscar. El coste es una llamada adicional y una latencia mayor.
-
-### 4.4 Decisiones y compromisos del RAG
-
-| Decisión | Beneficio | Riesgo o límite |
-|---|---|---|
-| Troceado por sección + splitter recursivo | Fragmentos coherentes y citables | Depende de que los PDFs sigan el contrato |
-| Namespace por estado | El asistente nunca recupera normativa obsoleta | Los documentos antiguos quedan en otro namespace; la regla del prompt sobre documentos OBSOLETOS no llega a activarse y no se explican renovaciones |
-| `topK = 8` | Buen equilibrio entre cobertura y contexto | No hay reordenación ni búsqueda híbrida |
-| Embeddings locales | Privacidad y coste cero | Calidad inferior a embeddings de proveedores frontera |
-| Memoria de 10 mensajes | Conversaciones con contexto | No hay memoria persistente entre sesiones |
-| Prompt con cita obligatoria | Reduce alucinaciones y facilita auditoría | No sustituye una evaluación sistemática de fidelidad |
+| Parámetro | Valor |
+|---|---|
+| Índice | `n8n-contratos` |
+| Namespace vigente | `kb-vigente-2026-10` |
+| Namespace obsoleto | `kb-obsoletos` |
+| `topK` | 8 |
+| Fragmento / solape | 1000 / 150 caracteres |
+| Memoria documental | 10 mensajes |
+| Modelo de embeddings | `nomic-embed-text:v1.5` |
 
 ---
 
-## 5. Medidas de seguridad
+## 5. Seguridad
 
-### 5.1 Credenciales y secretos
-
-- Las credenciales de Google (OAuth2), Pinecone y Ollama se guardan en el almacén de credenciales de n8n, cifrado por la instancia.
-- Los JSON de los workflows contienen referencias a credenciales, no claves ni tokens.
-- No se han incluido IDs de hojas, carpetas ni direcciones de correo en esta memoria.
-
-### 5.2 Superficie de exposición
-
-- El Chat Trigger **no está publicado como chat público**; su uso previsto es el editor de n8n.
-- La ingesta usa sondeo de Google Drive, no un webhook público.
-- La instancia se ejecuta en Docker en local. Para un despliegue real se recomienda añadir autenticación de n8n, HTTPS mediante proxy inverso y aislamiento de red.
-
-### 5.3 Validación y aislamiento del conocimiento
-
-- El nodo de normalización rechaza PDFs sin cabecera documental, sin secciones numeradas o con secciones vacías.
-- La separación por namespaces impide que la consulta del asistente alcance documentos marcados como obsoletos.
-- El *system prompt* prohíbe responder de memoria y exige evidencia documental.
-
-### 5.4 Integridad del registro de incidencias
-
-- `Information Extractor1` valida un esquema JSON con siete campos obligatorios y `additionalProperties: false`.
-- La escritura final usa `appendOrUpdate` con `ID` como columna de coincidencia, lo que evita crear una fila nueva cuando se modifica una incidencia existente.
-- La fecha y el identificador se generan en nodos deterministas, no con el modelo.
-
-### 5.5 Control humano
-
-El flujo contempla una confirmación humana para operaciones con impacto mediante un nodo Gmail `sendAndWait`. **En la versión actual ese nodo está deshabilitado**, por lo que la rama de impacto continúa sin aprobación. Es la principal carencia de seguridad del diseño y la primera mejora recomendada.
-
-### 5.6 Privacidad de los datos
-
-- La inferencia y los embeddings se ejecutan en Ollama local.
-- Pinecone almacena vectores y metadatos en un servicio externo; conviene clasificar la información antes de indexarla y revisar la política del plan utilizado.
-- Las descripciones de incidencias pueden contener datos personales. Se recomienda definir retención, redacción y control de acceso a la hoja.
-- La documentación recuperada debe tratarse como contenido no confiable: un PDF podría incluir instrucciones maliciosas. El prompt actual no delimita explícitamente ese contenido.
-
-### 5.7 Riesgos residuales
-
-| Riesgo | Estado actual | Mitigación propuesta |
-|---|---|---|
-| Operaciones con impacto sin aprobación | Nodo Gmail deshabilitado | Activar aprobación con caducidad y auditoría |
-| Pérdida de datos de n8n | SQLite en el contenedor, sin volumen montado | Volumen persistente, copias y custodia de la clave de cifrado |
-| Instancia sin autenticación/HTTPS verificados | Uso local | Proxy TLS, autenticación y red privada |
-| Inyección de instrucciones vía documentos | Sin defensa explícita | Delimitar el contexto recuperado y separar instrucciones de datos |
-| Duplicados en Pinecone | Inserción sin borrado previo | Upsert por `document_id` + `version` o borrado por metadatos |
-| Duplicidad de escritura en incidencias | Agente con herramienta de escritura y nodo final de escritura | Consolidar un único camino de escritura |
-| Memoria del agente de incidencias | `Simple Memory2` sin clave de sesión explícita | Revisar y fijar una clave por conversación |
-| Datos personales en incidencias | Texto libre | Redacción, retención y permisos mínimos |
+- El Chat Trigger **no es público**: se usa desde el editor de n8n.
+- Las credenciales de Google, Pinecone y Ollama se guardan en el almacén de n8n; los workflows solo contienen referencias.
+- La rama documental busca únicamente en el namespace de normativa vigente.
+- La confirmación humana está **activa en el diseño** mediante Gmail `sendAndWait`, pero la copia local del workflow no tiene credencial Gmail asignada y el destinatario está escrito directamente en el nodo.
+- La nueva rama de incidencias ya no tiene validación determinista del JSON: el agente escribe en Sheets mediante una herramienta. Conviene revisar el resultado antes de dar el flujo por válido.
+- `Simple Memory1` y `Simple Memory2` no definen una clave de sesión explícita; puede mezclarse contexto entre conversaciones.
 
 ---
 
 ## 6. Dificultades encontradas
 
-| # | Síntoma | Causa | Solución aplicada | Estado |
-|---|---|---|---|---|
-| 1 | `No prompt specified` en el agente documental | `$('Nodo').item` no resuelve el contexto dentro de subnodos o después de un `If` | Uso de `$('When chat message received').first()` en el agente | Resuelto |
-| 2 | «Key parameter is empty» / «No session ID found» en la memoria | `sessionIdType: fromInput` no encuentra el Chat Trigger desde el subnodo | `sessionIdType: customKey` con el `sessionId` del trigger | Resuelto |
-| 3 | El prompt del agente se ejecutaba tres veces | La lectura de la hoja devolvía varias filas y el agente procesaba cada una | Nodo `Limit` con `lastItems` y máximo 1 | Resuelto |
-| 4 | `Invalid PDF structure` | PDF corrupto o no válido | `Extract from File` falla y la ingesta se detiene; el contrato documental evita indexar basura | Mitigado |
-| 5 | Errores de conexión en el trigger de Drive | «The connection cannot be established…»; host/OAuth/red | Requiere revisar credenciales y conectividad; no se ha añadido reintento | Pendiente |
-| 6 | Enrutamiento frágil | `If` e `If2` usan `contains` sobre texto libre (`true`, `es_impacto`) | Funciona con el prompt actual, pero no es robusto | Pendiente |
-| 7 | Riesgo de IDs repetidos | El ID se calcula a partir de la última fila de la hoja | Asume orden y formato numérico correctos | Pendiente |
-| 8 | Doble vía de escritura | `AI Agent2` tiene herramienta de escritura y después el flujo vuelve a escribir | Funciona, pero puede duplicar o sobrescribir | Pendiente |
-| 9 | Confirmación humana inactiva | Nodo Gmail deshabilitado | Rama de impacto sin control real | Pendiente |
-| 10 | Posible mezcla de contexto en incidencias | `Simple Memory2` no define clave de sesión explícita | Revisar el alcance de la memoria | Pendiente |
-| 11 | La rama de incidencia no devolvía una respuesta legible al chat | El último nodo era Google Sheets y el Chat Trigger usa `lastNode`, que espera `{ output: ... }` | Nodo `Respuesta al chat` con el campo `output` después de la escritura | Resuelto; pendiente prueba E2E |
+| # | Dificultad | Causa | Estado |
+|---|---|---|---|
+| 1 | La rama documental no respondía | Con `responseNodes`, el agente documental no tenía un nodo `Chat` de salida | Resuelto: añadido `Respuesta documental` con `{{ $json.output }}` |
+| 2 | La confirmación humana no está operativa en local | El nodo Gmail no tiene credencial en la copia local y el destinatario está hardcodeado | Pendiente: asignar credencial y parametrizar el correo |
+| 3 | Se perdió la validación determinista de la incidencia | Se eliminaron `Information Extractor` y el nodo final de escritura; el agente escribe por herramienta | Pendiente: validar el JSON o volver a una escritura determinista |
+| 4 | Fecha e ID dependen de la configuración y del orden de la hoja | La copia local no fija `timezone`; el ID se calcula desde la última fila | Pendiente: fijar `Europe/Madrid` y calcular el máximo ID o usar UUID |
 
-**Nota de verificación (2026-11-01).** El nodo se importó y publicó correctamente y aparece en la versión activa (`8b48ddb7-f0d0-4b2f-86af-77dfeba6257c`). No se ha ejecutado la rama de incidencia de extremo a extremo porque el Chat Trigger no es público y la credencial de Google Sheets aparece como «needs to be reconnected» en los logs. Hay que reconectarla en n8n → Credentials y probar con una incidencia de prueba.
-
-**Evidencia de ejecuciones.** En la base de datos de n8n, el histórico del asistente registra 12 ejecuciones correctas, 3 errores y 2 cancelaciones; la ingesta registra 8 correctas y 43 errores. En la muestra de errores revisada, la mayoría corresponden a fallos de conexión del trigger de Google Drive y uno a un PDF con estructura inválida; no se originaron en el pipeline de recuperación. El error `No prompt specified` del asistente pertenece a una versión anterior del agente documental y quedó resuelto con la corrección de expresiones descrita.
+La corrección de expresiones con `.first()` en subnodos y el `Limit` para evitar prompts triples se mantiene en esta versión.
 
 ---
 
 ## 7. Mejoras propuestas
 
-| Prioridad | Mejora | Impacto |
-|---|---|---|
-| **Alta** | Activar el control humano (Gmail `sendAndWait` o nodo de aprobación con caducidad y auditoría) | Elimina la principal carencia de seguridad |
-| **Alta** | Hacer idempotente la ingesta: borrar o actualizar por `document_id` + `version`, o usar un hash del archivo | Evita vectores duplicados al reindexar |
-| **Alta** | Consolidar una sola vía de escritura en incidencias (agente de solo lectura + `appendOrUpdate` determinista) | Evita duplicados y sobrescrituras |
-| **Alta** | Triaje con salida JSON validada y `Switch` en lugar de `contains` | Enrutamiento robusto y depurable |
-| **Alta** | Reintentos, *Error Trigger*, alertas y registro de fallos | Reduce el impacto de caídas de Drive/Pinecone/Ollama |
-| **Alta** | Volumen persistente, copias, autenticación, HTTPS y rotación de credenciales | Operación segura y recuperable |
-| **Media** | Conjunto de evaluación del RAG: recuperación, fidelidad y latencia | Permite medir mejoras con datos |
-| **Media** | Filtros por metadatos, búsqueda híbrida, reordenador y ajuste de `topK`/chunk | Mejora la precisión de recuperación |
-| **Media** | Cubrir `fileUpdated`/`fileDeleted` y reconciliación Drive–Pinecone | Mantiene la KB sincronizada |
-| **Media** | Consulta explícita a `kb-obsoletos` para explicar renovaciones | Mejora la respuesta cuando una política cambia |
-| **Media** | IDs por máximo de hoja o UUID + contador; clave de sesión explícita en `Simple Memory2` | Evita colisiones y mezcla de contextos |
-| **Baja** | Comparar modelos locales, GPU/cuantización, PostgreSQL y modo cola | Escalabilidad y rendimiento |
-| **Baja** | Parametrizar entorno, versionar workflows en el repositorio y añadir paneles de observabilidad | Mantenibilidad y operación |
+1. **Configurar y parametrizar Gmail**: asignar la credencial OAuth2, mover el destinatario a una variable y añadir un registro de auditoría de la confirmación.
+2. **Recuperar una validación determinista**: que el agente solo consulte y extraiga, y que la escritura la haga un nodo `appendOrUpdate` con un esquema validado; así se evitan duplicados y campos vacíos.
+3. **Fijar la zona horaria y robustecer los identificadores**: `Europe/Madrid` en la configuración del workflow, ID por máximo de hoja o UUID, y claves de sesión explícitas en las memorias.
 
 ---
 
-## 8. Conclusiones
+## 8. Conclusión
 
-El sistema demuestra que es posible construir un asistente documental y un registro de incidencias con un stack completamente gratuito y local. La separación entre ingesta y consulta, el contrato documental, los metadatos por sección y el uso de namespaces por estado son las decisiones que aportan más valor: hacen que las respuestas sean citables, auditables y resistentes a la normativa obsoleta.
-
-Las principales carencias no están en la idea de RAG, sino en los bordes: el control humano está diseñado pero desactivado, la ingesta no es idempotente, el enrutamiento depende de comparaciones de texto y la operación carece de alertas y persistencia robusta. Resolver esos puntos —empezando por la aprobación humana y la idempotencia— convertiría un prototipo funcional en un sistema preparado para uso continuado.
-
----
-
-## Anexo — Parámetros clave
-
-| Parámetro | Valor |
-|---|---|
-| Modelo de chat | `qwen3:8b` |
-| Modelo de embeddings | `nomic-embed-text:v1.5` |
-| Índice Pinecone | `n8n-contratos` |
-| Namespace de vigentes | `kb-vigente-2026-10` |
-| Namespace de obsoletos | `kb-obsoletos` |
-| `topK` de recuperación | `8` |
-| Ventana de memoria documental | `10` mensajes |
-| Tamaño de fragmento | `1000` caracteres |
-| Solape de fragmento | `150` caracteres |
-| Tamaño de lote de ingesta | `1` sección |
-| Sondeo de Drive | cada minuto |
-| Opciones del agente de incidencias | `think: false`, `lowVram: false` |
-| Respuesta al chat | Nodo `Respuesta al chat` (Set) con campo `output` |
-| Formato de ID | `INC-XXX` |
-| Formato de fecha | `yyyy-MM-dd HH:mm` |
-| Campos de incidencia | `ID`, `ASUNTO`, `CATEGORIA`, `DESCRIPCION`, `FECHA`, `ESTADO`, `CARACTER` |
-| Estados de incidencia | `PENDIENTE` al crear |
-| Caracteres de incidencia | `URGENTE`, `SENSIBLE`, `INCOMPLETO`, `NORMAL` |
-| Confirmación humana | Deshabilitada en la versión actual |
+La nueva versión mejora el triaje y separa claramente el registro, la consulta de incidencias y la consulta documental. El uso de `responseNodes` da control explícito sobre los mensajes y las tres ramas ya tienen su nodo `Chat`: `Chat`, `Respuesta de consulta de incidencia` y `Respuesta documental`. Antes de activar el workflow conviene configurar Gmail y decidir si se mantiene la escritura directa del agente o se recupera la validación determinista.

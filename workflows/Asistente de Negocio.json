@@ -1,5 +1,5 @@
 {
-  "name": "Asistente de negocio",
+  "name": "Asistente de negocio latest",
   "nodes": [
     {
       "parameters": {
@@ -137,7 +137,7 @@
         "promptType": "define",
         "text": "={{ $('When chat message received').first().json.chatInput }}",
         "options": {
-          "systemMessage": "Eres un agente experto en la normativa interna de la empresa. Respondes preguntas de los empleados usando exclusivamente la información de la base documental de Pinecone.\n\nReglas:\n1. Antes de responder, usa siempre la herramienta \"Answer questions with a vector store\" para buscar evidencia documental. No respondas de memoria.\n2. Responde en español, de forma clara y concisa.\n3. Toda respuesta debe estar respaldada por la documentación. Al final, cita el documento y la sección con el formato (KB-XX, sección X).\n4. Nunca inventes información. Si la búsqueda no devuelve evidencia relevante, responde exactamente: \"No se ha encontrado nada de información al respecto\".\n5. Si la información encontrada está marcada como OBSOLETA o renovada, indica que la política ha sido renovada y proporciona la información actualizada de los documentos VIGENTES."
+          "systemMessage": "Eres un agente experto en la normativa interna de la empresa. Respondes preguntas de los empleados usando exclusivamente la información de la base documental de Pinecone.\n\nReglas:\n1. Antes de responder, usa siempre la herramienta \"Answer questions with a vector store\" para buscar evidencia documental. No respondas de memoria.\n2. Responde en español, de forma clara y concisa. No repitas ideas ni información.\n3. No menciones documentos, secciones ni fuentes dentro del cuerpo de la respuesta. La única referencia documental debe ser una línea final con el formato (KB-XX, sección X).\n4. Si hay varias fuentes, agrúpalas en esa misma línea final separadas por \";\". Cita cada fuente una sola vez y no repitas la misma cita en el texto.\n5. Nunca inventes información. Si la búsqueda no devuelve evidencia relevante, responde exactamente: \"No se ha encontrado nada de información al respecto\".\n6. Si la información encontrada está marcada como OBSOLETA o renovada, indica que la política ha sido renovada y proporciona la información actualizada de los documentos VIGENTES."
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -750,6 +750,21 @@
       "id": "54e327a4-294d-43ec-b4a0-224de25987b0",
       "name": "Respuesta de consulta de incidencia",
       "webhookId": "a6872293-a678-4bf8-9c85-8ba200efd367"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1.3,
+      "position": [
+        736,
+        624
+      ],
+      "id": "771320ce-992e-4878-8ee3-620ba3bd2edc",
+      "name": "Respuesta documental",
+      "webhookId": "363182c0-cef5-46a8-953f-ac10c022f4ee"
     }
   ],
   "pinData": {},
@@ -1049,6 +1064,17 @@
           }
         ]
       ]
+    },
+    "Agente de consultas a Documentacion": {
+      "main": [
+        [
+          {
+            "node": "Respuesta documental",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -1058,7 +1084,7 @@
     "timeSavedMode": "fixed",
     "timezone": "Europe/Madrid",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "availableInMCP": true
   },
   "versionId": "46b15fd6-3ffd-4b72-81a9-39beb0a187e2",
   "meta": {
