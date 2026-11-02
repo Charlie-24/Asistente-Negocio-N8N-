@@ -8,14 +8,14 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
       "typeVersion": 1,
       "position": [
-        608,
-        1200
+        208,
+        1248
       ],
-      "id": "f8cdc577-ac49-400f-bff0-67c497676c60",
+      "id": "83bdb562-a46a-4310-9857-668adcb3e1c3",
       "name": "Embeddings Ollama",
       "credentials": {
         "ollamaApi": {
-          "id": "kxunIjhiChdFCPNR",
+          "id": "eUfwVPI2Zt50rlPJ",
           "name": "Ollama account"
         }
       }
@@ -35,34 +35,37 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
       "typeVersion": 1.3,
       "position": [
-        528,
-        992
+        128,
+        1040
       ],
-      "id": "5eedad12-b3d9-4dcd-9b47-d6a544f838b2",
+      "id": "1b8cd62d-b37d-420d-b259-d03f2f80db3e",
       "name": "Pinecone Vector Store",
       "credentials": {
         "pineconeApi": {
-          "id": "oVzv2zTTC07cnj4q",
-          "name": "Pinecone account (sapal24)"
+          "id": "TnacwuRxaahSF24t",
+          "name": "Pinecone account"
         }
       }
     },
     {
       "parameters": {
         "model": "qwen3:8b",
-        "options": {}
+        "options": {
+          "think": false,
+          "temperature": 0
+        }
       },
       "type": "@n8n/n8n-nodes-langchain.lmOllama",
       "typeVersion": 1,
       "position": [
-        816,
-        992
+        416,
+        1040
       ],
-      "id": "fef29516-bb95-480d-b045-ef2825c58774",
+      "id": "1733fb90-5133-41b2-bcb9-10d4a1e8ea83",
       "name": "Ollama Model",
       "credentials": {
         "ollamaApi": {
-          "id": "kxunIjhiChdFCPNR",
+          "id": "eUfwVPI2Zt50rlPJ",
           "name": "Ollama account"
         }
       }
@@ -75,28 +78,31 @@
       "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
       "typeVersion": 1.1,
       "position": [
-        640,
-        784
+        240,
+        832
       ],
-      "id": "852958d1-82dc-4394-9192-cceecd205cbd",
+      "id": "faef17a2-33b6-4705-bca0-f2e7cf99b7d2",
       "name": "Answer questions with a vector store"
     },
     {
       "parameters": {
         "model": "qwen3:8b",
-        "options": {}
+        "options": {
+          "think": false,
+          "temperature": 0.2
+        }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
       "typeVersion": 1,
       "position": [
-        384,
-        784
+        -16,
+        832
       ],
-      "id": "7f1e284c-eb31-45c6-a214-075646f74ec3",
+      "id": "77666c48-985c-44ad-a387-8b33834bfaa8",
       "name": "Ollama Chat Model",
       "credentials": {
         "ollamaApi": {
-          "id": "kxunIjhiChdFCPNR",
+          "id": "eUfwVPI2Zt50rlPJ",
           "name": "Ollama account"
         }
       }
@@ -104,16 +110,16 @@
     {
       "parameters": {
         "sessionIdType": "customKey",
-        "sessionKey": "={{ $('When chat message received').first().json.sessionId }}",
+        "sessionKey": "={{ 'doc:' + $('When chat message received').first().json.sessionId }}",
         "contextWindowLength": 10
       },
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.4,
       "position": [
-        512,
-        784
+        112,
+        832
       ],
-      "id": "281b35e8-904f-4e24-9974-9edcaa785768",
+      "id": "677cc225-02ee-4573-8602-201839527ec0",
       "name": "Simple Memory"
     },
     {
@@ -125,12 +131,12 @@
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.5,
       "position": [
-        -1104,
-        304
+        -1504,
+        352
       ],
-      "id": "abde1327-954b-4838-bb97-8b9abc236994",
+      "id": "9a89c30a-d609-48c0-ae48-ed576aa8fc4f",
       "name": "When chat message received",
-      "webhookId": "8bfde75d-c442-488e-9040-6fdc61539f1f"
+      "webhookId": "779392d7-7d52-48ea-bb53-d7aac267f00b"
     },
     {
       "parameters": {
@@ -143,43 +149,31 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        448,
-        624
+        48,
+        672
       ],
-      "id": "0fe02df1-bcfc-417c-93fe-919bc2f8791d",
+      "id": "c7002036-fd2e-4edb-9cca-18693b9e3e65",
       "name": "Agente de consultas a Documentacion"
     },
     {
       "parameters": {
-        "promptType": "define",
-        "text": "=en base a la información proporcionada, debes decidir si el mensaje enviado por el empleado es una consulta, o un registro de incidencia. Debes devolver como respuesta \"es_registro\" (sin las comillas) si es un registro o una modificación. A su misma vez, si es una consulta y es un seguimiento de una incidencia, escribe \"es_seguimiento\".\n\nEn caso de ser una operación de impacto, añade justo debajo \"es_impacto\". Una operación con impacto es, por ejemplo, enviar una comunicación externa o modificar el estado de un expediente, o querer consultar una incidencia registrada o algo con información sensible.\n\nEs importante que no te inventes los nombres de las variables y escribas exactamente lo que está entre las comillas. También es importante que diferencies las consultas de documentos con las de las incidencias.\n\nInformación proporcionada:{{ $('When chat message received').item.json.chatInput }}\n",
-        "batching": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.chainLlm",
-      "typeVersion": 1.9,
-      "position": [
-        -880,
-        304
-      ],
-      "id": "3880473e-e464-46d3-8795-644019dcf07a",
-      "name": "Basic LLM Chain"
-    },
-    {
-      "parameters": {
         "model": "qwen3:8b",
-        "options": {}
+        "options": {
+          "think": false,
+          "temperature": 0
+        }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
       "typeVersion": 1,
       "position": [
-        -816,
-        528
+        -1216,
+        576
       ],
-      "id": "b4ac4e2b-6026-4e83-8f28-5752791445c7",
+      "id": "472be6cd-5483-4d48-8f8e-232ff5e4608f",
       "name": "Ollama Chat Model1",
       "credentials": {
         "ollamaApi": {
-          "id": "kxunIjhiChdFCPNR",
+          "id": "eUfwVPI2Zt50rlPJ",
           "name": "Ollama account"
         }
       }
@@ -193,10 +187,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1360,
-        48
+        960,
+        96
       ],
-      "id": "a3e7513d-ed4e-4331-9a9a-94e9163f18b3",
+      "id": "1763e341-dade-4e44-b5a7-549921504c1a",
       "name": "AI Agent"
     },
     {
@@ -210,14 +204,14 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
       "typeVersion": 1,
       "position": [
-        1248,
-        288
+        848,
+        336
       ],
-      "id": "7e67cf9c-725f-40c2-a5f1-aff3d902695f",
+      "id": "a198561b-4abf-4ece-8ef7-0fbe842a2b02",
       "name": "Ollama Chat Model2",
       "credentials": {
         "ollamaApi": {
-          "id": "kxunIjhiChdFCPNR",
+          "id": "eUfwVPI2Zt50rlPJ",
           "name": "Ollama account"
         }
       }
@@ -245,10 +239,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        1024,
-        48
+        624,
+        96
       ],
-      "id": "b2c1e71c-ed3d-4192-a0ca-344f9cb2c90b",
+      "id": "ae0f47c5-d4fb-44ca-8805-f961894bfb7d",
       "name": "Edit Fields"
     },
     {
@@ -275,22 +269,22 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        144,
-        48
+        -256,
+        96
       ],
-      "id": "868e71cf-de91-4bcd-bea7-b4409455495b",
+      "id": "8182c5a0-25e5-40d1-9ada-117ee439bc69",
       "name": "Datos",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "0YX4ykqvAnQE6PSe",
-          "name": "Sheets Borralacuentini"
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
         }
       }
     },
     {
       "parameters": {
         "operation": "sendAndWait",
-        "sendTo": "pacheco.sapal24@cadiz.salesianos.edu",
+        "sendTo": "=olmedoreyescarlos580@gmail.com",
         "subject": "Requerimiento de confirmación humana",
         "message": "Confirma que la acción externa es válida.",
         "options": {}
@@ -298,16 +292,16 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        -304,
-        224
+        -704,
+        272
       ],
-      "id": "fe51bc18-0fc1-4a9b-bc12-d1dfa7d6daa8",
+      "id": "2c0217de-bac3-4883-b613-259fd07472ce",
       "name": "Confirmación humana (cambiar correo si es necesario)",
       "webhookId": "b03b4902-d6a5-49e7-8c11-1f5d67140fc3",
       "credentials": {
         "gmailOAuth2": {
-          "id": "T7cpTnoPEWOSnqRe",
-          "name": "Gmail Borralacuentini"
+          "id": "lckK2oJgNFmb6snj",
+          "name": "Gmail account"
         }
       }
     },
@@ -323,11 +317,11 @@
           "conditions": [
             {
               "id": "99fc35b4-b6ba-400a-ab06-9b695d94289e",
-              "leftValue": "={{ $json.text }}",
-              "rightValue": "es_impacto",
+              "leftValue": "={{ $json.output.impacto }}",
+              "rightValue": "si",
               "operator": {
                 "type": "string",
-                "operation": "contains"
+                "operation": "equals"
               }
             }
           ],
@@ -338,10 +332,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -528,
-        304
+        -928,
+        352
       ],
-      "id": "46c4b1b4-075b-42ad-8cf2-426c7dfbf832",
+      "id": "4f569554-0f95-4736-a832-ed14e72e7550",
       "name": "Es de impacto? (true, requiere revisión humana)"
     },
     {
@@ -356,11 +350,11 @@
           "conditions": [
             {
               "id": "7079fdd0-a933-4bc5-8111-f249130ac457",
-              "leftValue": "={{ $('Basic LLM Chain').item.json.text }}",
-              "rightValue": "es_registro",
+              "leftValue": "={{ $('Triaje contextual').first().json.output.ruta }}",
+              "rightValue": "registro",
               "operator": {
                 "type": "string",
-                "operation": "contains"
+                "operation": "equals"
               }
             }
           ],
@@ -371,10 +365,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -80,
-        320
+        -480,
+        368
       ],
-      "id": "ef70954f-094f-42ff-8fd7-5e6c5d174c3a",
+      "id": "2a21f1c0-7818-4ac2-a372-5fbb97de1d97",
       "name": "Para mirar si es un registro (true) o una consulta (false)"
     },
     {
@@ -385,22 +379,25 @@
       "type": "@n8n/n8n-nodes-langchain.chat",
       "typeVersion": 1.3,
       "position": [
-        1840,
-        48
+        1440,
+        96
       ],
-      "id": "0aa72c92-b7f3-435a-908c-e562c0d5fde7",
+      "id": "b864e310-eaeb-47b3-860a-e46a524d9032",
       "name": "Chat",
       "webhookId": "409e6901-f6c1-414f-900f-6ff1fc0c8897"
     },
     {
-      "parameters": {},
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'registro:' + $('When chat message received').first().json.sessionId }}"
+      },
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.4,
       "position": [
-        1376,
-        288
+        976,
+        336
       ],
-      "id": "a85ea02a-4612-4f22-9e0b-4932bd1d056f",
+      "id": "0ffe3f48-6f04-40cd-803d-15714429c701",
       "name": "Simple Memory1"
     },
     {
@@ -410,10 +407,10 @@
       "type": "n8n-nodes-base.limit",
       "typeVersion": 1,
       "position": [
-        576,
-        48
+        176,
+        96
       ],
-      "id": "72cc7cc6-dbe3-46af-b4ac-b2e4eb315a33",
+      "id": "12f7453c-e4a5-4150-858c-937b2d6fa599",
       "name": "Limit1"
     },
     {
@@ -423,11 +420,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        496,
+        96,
         -32
       ],
       "typeVersion": 1,
-      "id": "0a6ad724-df03-45df-935f-cfd0660ca754",
+      "id": "d4013e2b-196d-4d69-9071-4edde03a3041",
       "name": "Sticky Note2"
     },
     {
@@ -459,15 +456,15 @@
       "type": "n8n-nodes-base.googleSheetsTool",
       "typeVersion": 4.7,
       "position": [
-        1504,
-        288
+        1104,
+        336
       ],
-      "id": "57faa4df-4ad7-4751-8ae1-ee789c67917e",
+      "id": "dc641894-292e-469b-bef0-4fb8c369667b",
       "name": "Búsqueda para modificación1",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "0YX4ykqvAnQE6PSe",
-          "name": "Sheets Borralacuentini"
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
         }
       }
     },
@@ -576,15 +573,15 @@
       "type": "n8n-nodes-base.googleSheetsTool",
       "typeVersion": 4.7,
       "position": [
-        1632,
-        288
+        1232,
+        336
       ],
-      "id": "5ee0ceb5-7b42-4a3c-984f-f678570c06ae",
+      "id": "abda1a18-3f3a-4cab-a85a-e489a45aeb71",
       "name": "Actualización o creación de filas1",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "0YX4ykqvAnQE6PSe",
-          "name": "Sheets Borralacuentini"
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
         }
       }
     },
@@ -595,11 +592,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        -1184,
-        448
+        -1600,
+        544
       ],
       "typeVersion": 1,
-      "id": "dd588f81-19d4-4009-9149-c004bc65967d",
+      "id": "edc71c11-2fe8-4abc-8115-493d227c0a22",
       "name": "Sticky Note3"
     },
     {
@@ -614,11 +611,11 @@
           "conditions": [
             {
               "id": "d2c50c91-a395-4094-8770-cb2d2af9ff45",
-              "leftValue": "={{ $('Basic LLM Chain').item.json.text }}",
-              "rightValue": "es_seguimiento",
+              "leftValue": "={{ $('Triaje contextual').first().json.output.ruta }}",
+              "rightValue": "seguimiento",
               "operator": {
                 "type": "string",
-                "operation": "contains"
+                "operation": "equals"
               }
             }
           ],
@@ -629,10 +626,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        144,
-        560
+        -256,
+        608
       ],
-      "id": "68b3cab1-b0f1-440d-89f7-4e127f78fc65",
+      "id": "302dec6c-fa58-40b2-9f9c-c495289640e9",
       "name": "If"
     },
     {
@@ -644,41 +641,46 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        368,
-        288
+        -32,
+        336
       ],
-      "id": "1d3035d2-43e9-4937-9d68-7955340f031b",
+      "id": "3f3bc0dd-642d-4a32-aa2f-68c473058867",
       "name": "AI Agent1"
     },
     {
       "parameters": {
         "model": "qwen3:8b",
-        "options": {}
+        "options": {
+          "think": false
+        }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
       "typeVersion": 1,
       "position": [
-        368,
-        464
+        -32,
+        512
       ],
-      "id": "9efb4845-9189-45fb-9054-33fa267255c9",
+      "id": "54b69ced-48fe-4de6-a784-607ba1b8de87",
       "name": "Ollama Chat Model3",
       "credentials": {
         "ollamaApi": {
-          "id": "kxunIjhiChdFCPNR",
+          "id": "eUfwVPI2Zt50rlPJ",
           "name": "Ollama account"
         }
       }
     },
     {
-      "parameters": {},
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'seguimiento:' + $('When chat message received').first().json.sessionId }}"
+      },
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.4,
       "position": [
-        464,
-        464
+        64,
+        512
       ],
-      "id": "234ea254-1856-42cc-b060-120e2c3a00ef",
+      "id": "b27cdcac-622f-4644-a15c-ede05da6ab70",
       "name": "Simple Memory2"
     },
     {
@@ -688,11 +690,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        -944,
-        144
+        -1360,
+        96
       ],
       "typeVersion": 1,
-      "id": "42d14b43-ff3a-4750-b44f-514e097ff050",
+      "id": "089eb878-d62f-45b6-85a8-986439a9fbc7",
       "name": "Sticky Note"
     },
     {
@@ -724,15 +726,15 @@
       "type": "n8n-nodes-base.googleSheetsTool",
       "typeVersion": 4.7,
       "position": [
-        560,
-        464
+        160,
+        512
       ],
-      "id": "1c1b7399-3a89-48f9-bbec-8149536d305b",
+      "id": "767b8164-18aa-4d81-9be7-55e0b2e3621d",
       "name": "Búsqueda para consultar una incidencia registrada",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "0YX4ykqvAnQE6PSe",
-          "name": "Sheets Borralacuentini"
+          "id": "CaYQebsRLKdYZNdZ",
+          "name": "Google Sheets account"
         }
       }
     },
@@ -744,10 +746,10 @@
       "type": "@n8n/n8n-nodes-langchain.chat",
       "typeVersion": 1.3,
       "position": [
-        736,
-        288
+        336,
+        336
       ],
-      "id": "54e327a4-294d-43ec-b4a0-224de25987b0",
+      "id": "c7e82f62-aab2-49aa-b2c9-d08b3a02e414",
       "name": "Respuesta de consulta de incidencia",
       "webhookId": "a6872293-a678-4bf8-9c85-8ba200efd367"
     },
@@ -759,12 +761,59 @@
       "type": "@n8n/n8n-nodes-langchain.chat",
       "typeVersion": 1.3,
       "position": [
-        736,
+        448,
         624
       ],
-      "id": "771320ce-992e-4878-8ee3-620ba3bd2edc",
+      "id": "8eed1f5a-58c3-4524-a331-a563d5adb322",
       "name": "Respuesta documental",
-      "webhookId": "363182c0-cef5-46a8-953f-ac10c022f4ee"
+      "webhookId": "730e203a-8542-4b19-82d0-b2de3a989290"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('When chat message received').first().json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Eres el clasificador de intenciones del asistente de negocio. Usa el historial de la conversación para resolver referencias como «eso», «la», «lo», «anteriores» o «el mismo». Devuelve exclusivamente un JSON válido con esta forma:\n{\"ruta\":\"documentacion\",\"impacto\":\"no\"}\n\nReglas:\n- ruta=\"documentacion\": preguntas sobre normativa, políticas, convenios, documentación interna o seguimientos de esas preguntas.\n- ruta=\"registro\": crear una incidencia nueva o modificar una existente.\n- ruta=\"seguimiento\": consultar el estado de una incidencia ya registrada.\n- impacto=\"si\": comunicación externa, cambio de estado de un expediente, consulta de una incidencia registrada o información sensible; en caso contrario \"no\".\n- Si dudas entre documentacion y registro, elige documentacion.\n- No escribas texto fuera del JSON."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1280,
+        352
+      ],
+      "id": "ddde8371-cbea-4419-be02-9223fc646db9",
+      "name": "Triaje contextual"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'triage:' + $('When chat message received').first().json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        -1104,
+        576
+      ],
+      "id": "bc729eeb-f708-4b4b-942a-e4b1236dd85c",
+      "name": "Simple Memory - Triaje"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"ruta\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"documentacion\",\n        \"registro\",\n        \"seguimiento\"\n      ]\n    },\n    \"impacto\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"si\",\n        \"no\"\n      ]\n    }\n  },\n  \"required\": [\n    \"ruta\",\n    \"impacto\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -992,
+        576
+      ],
+      "id": "c263d01b-6a37-4a8c-9d17-4096448f6a49",
+      "name": "Structured Output Parser (Triaje)"
     }
   ],
   "pinData": {},
@@ -839,18 +888,7 @@
       "main": [
         [
           {
-            "node": "Basic LLM Chain",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Basic LLM Chain": {
-      "main": [
-        [
-          {
-            "node": "Es de impacto? (true, requiere revisión humana)",
+            "node": "Triaje contextual",
             "type": "main",
             "index": 0
           }
@@ -861,7 +899,7 @@
       "ai_languageModel": [
         [
           {
-            "node": "Basic LLM Chain",
+            "node": "Triaje contextual",
             "type": "ai_languageModel",
             "index": 0
           }
@@ -1075,6 +1113,39 @@
           }
         ]
       ]
+    },
+    "Simple Memory - Triaje": {
+      "ai_memory": [
+        [
+          {
+            "node": "Triaje contextual",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser (Triaje)": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Triaje contextual",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Triaje contextual": {
+      "main": [
+        [
+          {
+            "node": "Es de impacto? (true, requiere revisión humana)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -1082,16 +1153,15 @@
     "executionOrder": "v1",
     "binaryMode": "separate",
     "timeSavedMode": "fixed",
-    "timezone": "Europe/Madrid",
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": true
   },
-  "versionId": "46b15fd6-3ffd-4b72-81a9-39beb0a187e2",
+  "versionId": "52dc11c9-0043-4442-9a8c-262f61a22a4b",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "6215e25efcbe8b4f6391b1bbb5662649ec669971deb451b584e3f5ca823a1da4"
+    "instanceId": "5e7e570e1035a077e91bf4af5be8a7cd2123fb10b37355469c28f793080327f9"
   },
   "nodeGroups": [],
-  "id": "u7zopmL14n7YgDDD",
+  "id": "ctxag6ce4d171ba6",
   "tags": []
 }
