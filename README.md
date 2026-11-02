@@ -1,11 +1,10 @@
-# Documentación técnica — Asistente de Negocio (versión contextual)
+# Documentación técnica — Asistente de Negocio
 
 | Ficha | |
 |---|---|
-| Fecha | 2026-11-02 |
 | Orquestador | n8n 2.41.7, self-hosted sobre Docker |
 | Workflow | `Asistente de negocio latest` (`workflows/Asistente de negocio latest.json`), ID `ctxag6ce4d171ba6`, versión `52dc11c9-0043-4442-9a8c-262f61a22a4b`; disponible en MCP |
-| Estado | Borrador, no activo; la versión anterior `Asistente de Negocio` (`S2t39QnJhVvhKq0t`) sigue activa en n8n |
+| Estado | Borrador, no activo; se usa desde el editor de n8n |
 | Modelo de lenguaje | `qwen3:8b` en Ollama |
 | Embeddings | `nomic-embed-text:v1.5` en Ollama |
 | Base vectorial | Pinecone, índice `n8n-contratos` |
@@ -21,14 +20,16 @@ El asistente recibe mensajes por chat y los clasifica en tres caminos:
 2. **Consulta sobre una incidencia ya registrada**, respondida con datos de la hoja.
 3. **Consulta sobre normativa interna**, respondida con RAG sobre Pinecone.
 
-El cambio principal respecto a la versión anterior es el **triaje contextual**:
+El triaje es un **AI Agent** (`Triaje contextual`) con memoria propia y salida estructurada. Devuelve un JSON cerrado `{ruta, impacto}` y los `If` comparan por **igualdad exacta**:
 
-- El antiguo `Basic LLM Chain` se ha sustituido por un **AI Agent** (`Triaje contextual`) con memoria propia y salida estructurada.
-- El triaje devuelve un JSON cerrado `{ruta, impacto}` en lugar de texto libre.
-- Los `If` comparan por **igualdad exacta** (`ruta = registro`, `ruta = seguimiento`, `impacto = si`); ya no usan `contains`.
-- Cada rama tiene su propia clave de memoria (`triage:`, `doc:`, `registro:`, `seguimiento:`), evitando que el JSON del triaje contamine el historial del agente documental.
+- `ruta = registro`: alta o modificación de una incidencia.
+- `ruta = seguimiento`: consulta de una incidencia ya registrada.
+- `ruta = documentacion`: consulta de normativa interna.
+- `impacto = si`: operación sensible o con impacto externo; activa la confirmación humana.
 
-Se mantiene el uso de **response nodes** (`responseMode: responseNodes`): cada rama termina en un nodo `Chat` que envía el mensaje al usuario.
+Cada rama tiene su propia clave de memoria (`triage:`, `doc:`, `registro:`, `seguimiento:`), de modo que el JSON del triaje no contamine el historial del agente documental.
+
+Las respuestas usan **response nodes** (`responseMode: responseNodes`): cada rama termina en un nodo `Chat` que envía el mensaje al usuario.
 
 ---
 
@@ -89,7 +90,7 @@ Las rutas se evalúan con igualdad exacta:
 
 Las tres herramientas de Sheets (`Búsqueda para modificación1`, `Actualización o creación de filas1` y `Búsqueda para consultar una incidencia registrada`) tienen asignada la credencial `Google Sheets account`. Al terminar, el nodo `Chat` responde: «Tu operación ha sido confirmada y procesada».
 
-La validación del JSON y la escritura siguen siendo responsabilidad del agente; no hay un `Information Extractor` ni un nodo determinista de escritura.
+La validación del JSON y la escritura las realiza el agente; no hay un `Information Extractor` ni un nodo determinista de escritura.
 
 ### 2.3 Rama de consulta de incidencia
 
@@ -107,7 +108,7 @@ El agente `Agente de consultas a Documentacion` es el camino por defecto para la
 
 La rama termina en el nodo `Chat` **`Respuesta documental`**, que envía al usuario el campo `output` del agente (`message = {{ $json.output }}`).
 
-> **Limitación conocida (citas):** la herramienta `Answer questions with a vector store` devuelve únicamente un texto redactado, no los metadatos de los fragmentos. Si ese texto no incluye la cita, el agente puede usar el ID interno de la llamada a la herramienta (un UUID) y prefijarlo con `KB-`, produciendo citas como `(KB-5f37dfaa-…, sección 1)` en lugar de `(KB-02, sección 1)`. Los metadatos de Pinecone sí son correctos (`document_id`, `seccion`, `version`, `estado`); el problema está en el puente entre la herramienta y el agente. La solución recomendada es un *tool workflow* que devuelva los fragmentos con sus metadatos, o pre-recuperar con Pinecone y pasar el contexto formateado al agente.
+La herramienta `Answer questions with a vector store` devuelve un texto redactado, no los metadatos de los fragmentos. La calidad de las citas y la latencia de esta rama se detallan en la sección de incidencias.
 
 ### 2.5 Ingesta documental
 
@@ -158,37 +159,33 @@ La ingesta normaliza el PDF por secciones antes de trocearlo. Cada fragmento con
 - La confirmación humana está **activa en el diseño** mediante Gmail `sendAndWait`. El nodo tiene credencial Gmail asignada, pero el destinatario sigue escrito directamente en el nodo y la credencial puede requerir reconexión OAuth2.
 - Las memorias usan claves explícitas por rama: `triage:`, `doc:`, `registro:` y `seguimiento:`. Esto evita mezclar contexto entre conversaciones y entre ramas.
 - La nueva rama de incidencias no tiene validación determinista del JSON: el agente escribe en Sheets mediante una herramienta. Conviene revisar el resultado antes de dar el flujo por válido.
-- La cita documental puede contener un UUID de herramienta (ver limitación en 2.4); no es un problema de seguridad, pero sí de trazabilidad.
 
 ---
 
-## 6. Dificultades encontradas
+## 6. Incidencias y dificultades
 
-| # | Dificultad | Causa | Estado |
+| # | Incidencia / dificultad | Causa | Estado |
 |---|---|---|---|
-| 1 | El triaje no tenía contextualidad | El `Basic LLM Chain` no tenía memoria y los `If` usaban `contains`; un seguimiento podía desviarse a incidencias y responder «Tu operación ha sido confirmada y procesada» | Resuelto: `Triaje contextual` (AI Agent) + `Simple Memory - Triaje` + `Structured Output Parser` + igualdad exacta en los `If` |
-| 2 | Las memorias se contaminaban entre ramas | Todas las `Simple Memory` usaban el mismo `sessionId`; el JSON del triaje quedaba en el historial del agente documental | Resuelto: claves `triage:`, `doc:`, `registro:` y `seguimiento:` |
-| 3 | La rama documental no respondía | Con `responseNodes`, el agente documental no tenía un nodo `Chat` de salida | Resuelto: `Respuesta documental` con `{{ $json.output }}` |
-| 4 | Citas con UUID en lugar de `KB-XX` | La herramienta del vector store devuelve solo texto; si no incluye la cita, el agente usa el ID de la llamada a la herramienta | Pendiente: tool workflow con metadatos o pre-recuperación con Pinecone + `Code` |
-| 5 | Latencia del agente documental | qwen3:8b en modo *thinking* podía tardar varios minutos y el chat se quedaba cargando | Parcial: `think:false` aplicado en los modelos del camino documental; falta medir y limitar tokens |
-| 6 | La confirmación humana no está operativa en local | El destinatario está hardcodeado y la credencial Gmail puede requerir reconexión | Pendiente: parametrizar el correo y validar el OAuth2 |
-| 7 | Se perdió la validación determinista de la incidencia | Se eliminaron `Information Extractor` y el nodo final de escritura; el agente escribe por herramienta | Pendiente: validar el JSON o volver a una escritura determinista |
-| 8 | Fecha e ID dependen de la configuración y del orden de la hoja | La copia no fija `timezone`; el ID se calcula desde la última fila | Pendiente: fijar `Europe/Madrid` y calcular el máximo ID o usar UUID |
+| 1 | Seguimientos mal clasificados | El triaje no conservaba el historial y las rutas dependían de coincidencias de texto | Corregido con AI Agent + memoria + salida estructurada + igualdad exacta |
+| 2 | Memorias contaminadas entre ramas | El triaje y el agente documental compartían el mismo buffer de sesión | Corregido con claves separadas `triage:`, `doc:`, `registro:` y `seguimiento:` |
+| 3 | Citas documentales con UUID | La herramienta del vector store devuelve solo texto; si no incluye la cita, el agente usa el ID de la llamada a la herramienta | Pendiente: herramienta que devuelva los metadatos o pre-recuperación con Pinecone |
+| 4 | Latencia del agente documental | qwen3:8b en modo *thinking* podía tardar varios minutos y el chat se quedaba cargando | Mitigado con `think:false`; pendiente medir y limitar tokens |
+| 5 | Confirmación humana y validación de incidencias | Destinatario de Gmail hardcodeado y credencial pendiente de reconexión; la escritura en Sheets depende del agente | Pendiente: parametrizar Gmail y añadir validación determinista |
 
 ---
 
-## 7. Mejoras propuestas
+## 7. Posibles mejoras
 
-1. **Citas documentales fiables**: sustituir `Answer questions with a vector store` por un *tool workflow* que devuelva los fragmentos con `document_id`, `seccion`, `version` y `estado`, o pre-recuperar en la rama documental y pasar el contexto formateado al agente. Añadir al *system prompt* la prohibición expresa de usar UUIDs o IDs de herramienta.
-2. **Configurar y parametrizar Gmail**: validar la credencial OAuth2, mover el destinatario a una variable y registrar la confirmación.
-3. **Recuperar una validación determinista de incidencias**: que el agente solo consulte y extraiga, y que la escritura la haga un nodo `appendOrUpdate` con un esquema validado.
-4. **Fijar la zona horaria y robustecer los identificadores**: `Europe/Madrid` en la configuración del workflow, ID por máximo de hoja o UUID.
-5. **Ampliar los casos de prueba**: mantener en `casos-de-prueba.pdf` los casos de registro, consulta, RAG, contraste de versiones obsoleta/vigente y contextualidad conversacional.
+1. **Citas documentales fiables**: sustituir `Answer questions with a vector store` por un *tool workflow* que devuelva los fragmentos con `document_id`, `seccion`, `version` y `estado`, o pre-recuperar en la rama documental y pasar el contexto formateado al agente.
+2. **Parametrizar Gmail**: validar la credencial OAuth2, mover el destinatario a una variable y registrar la confirmación.
+3. **Validación determinista de incidencias**: que el agente solo consulte y extraiga, y que la escritura la haga un nodo `appendOrUpdate` con un esquema validado.
+4. **Fijar zona horaria e identificadores**: `Europe/Madrid` en la configuración del workflow, ID por máximo de hoja o UUID.
+5. **Pruebas de regresión**: casos de registro, consulta, RAG, contraste de versiones obsoleta/vigente y contextualidad conversacional.
 
 ---
 
 ## 8. Conclusión
 
-La versión contextual mejora el triaje y separa claramente el registro, la consulta de incidencias y la consulta documental. El triaje ahora tiene memoria propia, salida estructurada y rutas exactas, y cada rama conserva su propio contexto. También se han asignado las credenciales de Sheets a las herramientas y se mantiene el control explícito de los mensajes con `responseNodes`.
+El asistente separa claramente el registro, la consulta de incidencias y la consulta documental. El triaje contextual aporta memoria y rutas exactas, y cada rama conserva su propio contexto. Las credenciales de Sheets están asignadas y los mensajes se controlan con `responseNodes`.
 
-Quedan tres frentes antes de considerar el workflow listo para producción: **citas documentales fiables** (evitar UUIDs y citar `KB-XX`), **confirmación humana parametrizada** y **validación determinista de incidencias**. La latencia del agente documental ha mejorado con `think:false`, pero conviene medirla y limitar la salida de los modelos.
+Quedan tres frentes antes de considerar el workflow listo para producción: **citas documentales fiables**, **confirmación humana parametrizada** y **validación determinista de incidencias**. La latencia del agente documental ha mejorado con `think:false`, pero conviene medirla y limitar la salida de los modelos.
